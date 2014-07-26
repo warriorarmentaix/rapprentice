@@ -2,7 +2,117 @@ import cloudprocpy
 from rapprentice import berkeley_pr2, clouds
 import cv2, numpy as np
 import skimage.morphology as skim
-DEBUG_PLOTS=False
+DEBUG_PLOTS=True
+
+
+import numpy as np
+def extract_red_grey(rgb, depth, T_w_k):
+    """
+    extract red points and grey points and downsample
+    """
+        
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
+    h = hsv[:,:,0]
+    s = hsv[:,:,1]
+    v = hsv[:,:,2]
+
+    h_mask = (h<25) | (h>115)
+    s_mask = (s > 80 )
+    v_mask = (v > 50)
+    red_mask = h_mask & s_mask & v_mask
+
+
+    h_mask = (h<140) & (h > 40)
+    s_mask = (s < 44) 
+    v_mask = (v > 67) & (v < 97)
+    grey_mask = h_mask & s_mask & v_mask
+
+
+    
+    valid_mask = depth > 0
+    
+    xyz_k = clouds.depth_to_xyz(depth, berkeley_pr2.f)
+    xyz_w = xyz_k.dot(T_w_k[:3,:3].T) + T_w_k[:3,3][None,None,:]
+    
+    z = xyz_w[:,:,2]   
+    z0 = xyz_k[:,:,2]
+
+    height_mask = xyz_w[:,:,2] > .75 # TODO pass in parameter
+    
+    good_mask = (red_mask | grey_mask) & height_mask & valid_mask
+    good_mask =   skim.remove_small_objects(good_mask,min_size=64)
+
+    if DEBUG_PLOTS:
+        #cv2.imshow("z0",z0/z0.max())
+        #cv2.imshow("z",z/z.max())
+        #cv2.imshow("hue", h_mask.astype('uint8')*255)
+        #cv2.imshow("sat", s_mask.astype('uint8')*255)
+        #cv2.imshow("val", v_mask.astype('uint8')*255)
+        #cv2.imshow("grey", grey_mask.astype('uint8')*255)
+        cv2.imshow("final",good_mask.astype('uint8')*255)
+        #cv2.imshow("small", small)
+        cv2.imshow("rgb", rgb)
+        cv2.waitKey()
+            
+        
+    
+
+    good_xyz = xyz_w[good_mask]
+    
+    return clouds.downsample(good_xyz, .0125)
+
+
+def extract_red_blue(rgb, depth, T_w_k):
+    """
+    extract red points and grey points and downsample
+    """
+        
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
+    h = hsv[:,:,0]
+    s = hsv[:,:,1]
+    v = hsv[:,:,2]
+
+    h_mask = (h<25) | (h>115)
+    s_mask = (s > 80 )
+    v_mask = (v > 50)
+    red_mask = h_mask & s_mask & v_mask
+    
+
+    h_mask = (h > 103) & (h < 123)
+    s_mask = (s > 140) & (s < 165)
+    v_mask = (v > 150) & (v < 210)
+    blue_mask = h_mask & s_mask & v_mask
+
+    valid_mask = depth > 0
+    
+    xyz_k = clouds.depth_to_xyz(depth, berkeley_pr2.f)
+    xyz_w = xyz_k.dot(T_w_k[:3,:3].T) + T_w_k[:3,3][None,None,:]
+    
+    z = xyz_w[:,:,2]   
+    z0 = xyz_k[:,:,2]
+
+    height_mask = xyz_w[:,:,2] > .75 # TODO pass in parameter
+    
+    good_mask = (red_mask | blue_mask) & height_mask & valid_mask
+    good_mask =   skim.remove_small_objects(good_mask,min_size=64)
+
+    if DEBUG_PLOTS:
+        #cv2.imshow("z0",z0/z0.max())
+        #cv2.imshow("z",z/z.max())
+        cv2.imshow("hue", h_mask.astype('uint8')*255)
+        cv2.imshow("sat", s_mask.astype('uint8')*255)
+        cv2.imshow("val", v_mask.astype('uint8')*255)
+        cv2.imshow("blue", blue_mask.astype('uint8')*255)
+        cv2.imshow("final",good_mask.astype('uint8')*255)
+        cv2.imshow("rgb", rgb)
+        cv2.waitKey()
+            
+        
+    
+
+    good_xyz = xyz_w[good_mask]
+    
+    return clouds.downsample(good_xyz, .0125)
 
 def extract_red(rgb, depth, T_w_k):
     """
@@ -14,9 +124,9 @@ def extract_red(rgb, depth, T_w_k):
     s = hsv[:,:,1]
     v = hsv[:,:,2]
     
-    h_mask = (h<15) | (h>145)
-    s_mask = (s > 30 )
-    v_mask = (v > 100)
+    h_mask = (h<25) | (h>115)
+    s_mask = (s > 80 )
+    v_mask = (v > 50)
     red_mask = h_mask & s_mask & v_mask
     
     valid_mask = depth > 0
@@ -33,22 +143,57 @@ def extract_red(rgb, depth, T_w_k):
     good_mask =   skim.remove_small_objects(good_mask,min_size=64)
 
     if DEBUG_PLOTS:
-        cv2.imshow("z0",z0/z0.max())
-        cv2.imshow("z",z/z.max())
+        #cv2.imshow("z0",z0/z0.max())
+        #cv2.imshow("z",z/z.max())
+        #cv2.imshow("hue", h_mask.astype('uint8')*255)
+        #cv2.imshow("sat", s_mask.astype('uint8')*255)
+        #cv2.imshow("val", v_mask.astype('uint8')*255)
+        cv2.imshow("final",good_mask.astype('uint8')*255)
+        cv2.imshow("rgb", rgb)
+        cv2.waitKey()
+    good_xyz = xyz_w[good_mask]
+    
+    return clouds.downsample(good_xyz, .0125)
+def filter_green(rgb, depth, T_w_k):
+    """
+    extract red points and downsample
+    """
+        
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
+    h = hsv[:,:,0]
+    s = hsv[:,:,1]
+    v = hsv[:,:,2]
+
+    h_mask = (h > 30) & (h < 130)
+    s_mask = (s > 70) & (h < 150) 
+    v_mask = (v < 140)
+    green_mask = h_mask & s_mask & v_mask
+    green_filter = np.invert(green_mask)
+    
+    valid_mask = depth > 0
+    
+    xyz_k = clouds.depth_to_xyz(depth, berkeley_pr2.f)
+    xyz_w = xyz_k.dot(T_w_k[:3,:3].T) + T_w_k[:3,3][None,None,:]
+    
+    z = xyz_w[:,:,2]   
+    z0 = xyz_k[:,:,2]
+
+    height_mask = xyz_w[:,:,2] > .7 # TODO pass in parameter
+    
+    good_mask = green_filter & height_mask & valid_mask
+    good_mask =   skim.remove_small_objects(good_mask,min_size=500)
+
+    if DEBUG_PLOTS:
+        #cv2.imshow("z0",z0/z0.max())
+        #cv2.imshow("z",z/z.max())
         cv2.imshow("hue", h_mask.astype('uint8')*255)
         cv2.imshow("sat", s_mask.astype('uint8')*255)
         cv2.imshow("val", v_mask.astype('uint8')*255)
         cv2.imshow("final",good_mask.astype('uint8')*255)
         cv2.imshow("rgb", rgb)
         cv2.waitKey()
-            
-        
-    
-
     good_xyz = xyz_w[good_mask]
-    
-
-    return clouds.downsample(good_xyz, .025)
+    return clouds.downsample(good_xyz, .0125)
     
     
 def grabcut(rgb, depth, T_w_k):

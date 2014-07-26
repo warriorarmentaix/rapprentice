@@ -74,6 +74,7 @@ except ImportError:
 import cloudprocpy, trajoptpy, openravepy
 import os, numpy as np, h5py, time
 from numpy import asarray
+import numpy as np
 import importlib
 
 cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
@@ -288,6 +289,7 @@ def main():
     
         redprint("Acquire point cloud")
         if args.fake_data_segment:
+            print demofile.keys()
             fake_seg = demofile[args.fake_data_segment]
             new_xyz = np.squeeze(fake_seg["cloud_xyz"])
             hmat = openravepy.matrixFromAxisAngle(args.fake_data_transform[3:6])
@@ -341,8 +343,9 @@ def main():
 
         handles = []
         old_xyz = np.squeeze(seg_info["cloud_xyz"])
-        handles.append(Globals.env.plot3(old_xyz,5, (1,0,0)))
-        handles.append(Globals.env.plot3(new_xyz,5, (0,0,1)))
+        handles.append(Globals.env.plot3(new_xyz,5,np.array([(0,1,0,1) for i in new_xyz])))
+        #Globals.viewer.Step()
+        handles.append(Globals.env.plot3(old_xyz,5,np.array([(1,0,0,1) for i in old_xyz])))
 
 
         scaled_old_xyz, src_params = registration.unit_boxify(old_xyz)
@@ -351,6 +354,10 @@ def main():
                                        plotting=5 if args.animation else 0,rot_reg=np.r_[1e-4,1e-4,1e-1], n_iter=50, reg_init=10, reg_final=.1)
         f = registration.unscale_tps(f, src_params, targ_params)
         
+        old_xyz_transformed = f.transform_points(old_xyz)
+        handles.append(Globals.env.plot3(old_xyz_transformed,5, np.array([(0,0,1,1) for i in old_xyz_transformed])))
+        #redprint("Transformed old points ================================")
+
         handles.extend(plotting_openrave.draw_grid(Globals.env, f.transform_points, old_xyz.min(axis=0)-np.r_[0,0,.1], old_xyz.max(axis=0)+np.r_[0,0,.1], xres = .1, yres = .1, zres = .04))        
 
         link2eetraj = {}
@@ -412,22 +419,23 @@ def main():
 
             ################################    
             redprint("Executing joint trajectory for segment %s, part %i using arms '%s'"%(seg_name, i_miniseg, bodypart2traj.keys()))
-
+            
             for lr in 'lr':
-                success &= set_gripper_maybesim(lr, binarize_gripper(seg_info["%s_gripper_joint"%lr][i_start]))
+                set_gripper_maybesim(lr, binarize_gripper(seg_info["%s_gripper_joint"%lr][i_start]))
                 # Doesn't actually check if grab occurred, unfortunately
 
         
-            if not success: break
-        
+            #if not success: break
+            
             if len(bodypart2traj) > 0:
-                success &= exec_traj_maybesim(bodypart2traj)
-
-            if not success: break
+                exec_traj_maybesim(bodypart2traj)
+            
+            #if not success: break
+            
 
 
         
-        redprint("Segment %s result: %s"%(seg_name, success))
+        #redprint("Segment %s result: %s"%(seg_name, success))
     
     
         if args.fake_data_segment: break
