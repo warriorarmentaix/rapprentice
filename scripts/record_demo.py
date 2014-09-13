@@ -52,7 +52,7 @@ for suffix in itertools.chain("", (str(i) for i in itertools.count())):
 
 try:
 
-    bag_cmd = "rosbag record /joint_states /joy -O %s"%demo_name
+    bag_cmd = "rosbag record /pr2_jacobian /joint_states /joy -O %s"%demo_name
     print colorize(bag_cmd, "green")
     bag_handle = subprocess.Popen(bag_cmd, shell=True)
     time.sleep(1)

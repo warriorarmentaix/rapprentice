@@ -58,8 +58,8 @@ def tps_eval(x_ma, lin_ag, trans_g, w_ng, x_na):
     K_mn = tps_kernel_matrix2(x_ma, x_na)
     return np.dot(K_mn, w_ng) + np.dot(x_ma, lin_ag) + trans_g[None,:]
 
-def tps_grad(x_ma, lin_ag, _trans_g, w_ng, x_na):
-    _N, D = x_na.shape
+def tps_grad(x_ma, lin_ag, _trans_g, w_ng, x_na): # vs x_na, y_ng, bend_coef, rot_coef, wt_n
+    N, D = x_na.shape
     M = x_ma.shape[0]
 
     assert x_ma.shape[1] == 3
@@ -227,6 +227,9 @@ def solve_eqp1(H, f, A):
     return x
     
 def tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n):
+    """
+        f.lin_ag, f.trans_g, f.w_ng = tps.tps_fit3(x_na, y_ng, bend_coef, rot_coef, wt_n)
+    """
     if wt_n is None: wt_n = np.ones(len(x_na))
     n,d = x_na.shape
 

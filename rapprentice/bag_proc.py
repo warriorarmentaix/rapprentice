@@ -4,21 +4,67 @@ import numpy as np
 import cv2
 import openravepy
 import os.path as osp
+from rapprentice import robot_states
+import matplotlib.pyplot as plt
+import IPython
+
+
+def extract_torques(bag):
+    jtf_torques = []
+    pid_torques = []
+    for (_, msg, _) in bag.read_messages(topics=['/my_controller_name/pid_torques']):        
+        pid_torques.append(np.array(msg.data))
+    for (_, msg, _) in bag.read_messages(topics=['/my_controller_name/jtf_torques']):        
+        jtf_torques.append(np.array(msg.data))
+    assert len(jtf_torques) > 0
+    assert len(pid_torques) > 0
+    return pid_torques, jtf_torques
 
 def extract_joints(bag):
-    """returns (names, traj) 
-    """
     traj = []
     stamps = []
-    for (_, msg, _) in bag.read_messages(topics=['/joint_states']):        
+    efforts = []
+    for (_, msg, _) in bag.read_messages(topics=['/joint_states']):  
         traj.append(msg.position)
+        efforts.append(msg.effort)
         stamps.append(msg.header.stamp.to_sec())
     assert len(traj) > 0
     names = msg.name
-    return names, stamps, traj
     
+    return names, stamps, traj, efforts
+
+def select_with_names(values, names, selections):
+    selected_values = []
+    indices = []
+
+    for selection in selections:
+        indices.append(names.index(selection))
+    assert len(values[0]) == len(names)
+    for i in xrange(len(values)):
+        sv = []
+        for j in indices:
+            sv.append(values[i][j])
+        sv = np.array(sv)
+        selected_values.append(sv)
+    return selected_values
+
+def extract_jacobians(bag):
+    jacobians = []
+    for (_, msg, _) in bag.read_messages(topics=['/pr2_jacobian']):
+        J = np.matrix(np.resize(np.array(msg.data), (6, 7)))
+        jacobians.append(J)
+    assert len(jacobians) > 0
+    return jacobians
+
+
+def compute_end_effector_forces(jacobians_ds, efforts_ds):
+    effs = []
+    for i, _ in enumerate(jacobians_ds):
+        effs.append(robot_states.compute_end_effector_force(jacobians_ds[i], efforts_ds[i-1]))
+    return effs
+
 def extract_joy(bag):
-    """sounds morbid    
+    """sounds morbid
     """
 
     stamps = []
@@ -93,7 +139,7 @@ def add_kinematics_to_group(group, linknames, manipnames, jointnames, robot):
             link2hmats[linkname].append(link.GetTransform())
     for (linkname, hmats) in link2hmats.items():
         group.create_group(linkname)
-        group[linkname]["hmat"] = np.array(hmats)      
+        group[linkname]["hmat"] = np.array(hmats)
         
     rave_traj = np.array(rave_traj)
     rave_ind_list = list(rave_inds)
@@ -115,11 +161,17 @@ def get_robot():
     robot = env.GetRobots()[0]
     return robot
     
-def add_bag_to_hdf(bag, annotations, hdfroot, demo_name):
-    joint_names, stamps, traj = extract_joints(bag)
+def add_bag_to_hdf(bag, annotations, hdfroot, demo_name, no_ds):
+    joint_names, stamps, traj, efforts = extract_joints(bag)
     traj = np.asarray(traj)
     stamps = np.asarray(stamps)
-    
+    efforts = np.asarray(efforts)
+
+    jacobians = extract_jacobians(bag)
+    jacobians = np.array(jacobians)
+    print efforts.shape
+    print jacobians.shape
+
     robot = get_robot()
 
     for seg_info in annotations:
@@ -132,15 +184,20 @@ def add_bag_to_hdf(bag, annotations, hdfroot, demo_name):
         
         [i_start, i_stop] = np.searchsorted(stamps, [start, stop])
         
-        stamps_seg = stamps[i_start:i_stop+1]
-        traj_seg = traj[i_start:i_stop+1]
-        sample_inds = fastrapp.resample(traj_seg, np.arange(len(traj_seg)), .01, np.inf, np.inf)
-        print "trajectory has length", len(sample_inds),len(traj_seg)
+        if no_ds:
+            sample_inds = range(i_start, i_stop+1)
+        else:
+            sample_inds = fastrapp.resample(traj_seg, np.arange(len(traj_seg)), .01, np.inf, np.inf)
+        print "trajectory has length", len(sample_inds)
 
     
-        traj_ds = traj_seg[sample_inds,:]
-        stamps_ds = stamps_seg[sample_inds]
-    
+        traj_ds = traj[sample_inds,:]
+        stamps_ds = stamps[sample_inds]
+        efforts_ds = efforts[sample_inds]
+        efforts_arm_ds = select_with_names(efforts_ds, joint_names, robot_states.arm_joint_names)
+        efforts_arm_ds = np.array(efforts_arm_ds)
+        jacobians_ds = jacobians[sample_inds]
+        # match / interpolate end effector forces at these times
         group["description"] = seg_info["description"]
         group["stamps"] = stamps_ds
         group.create_group("joint_states")
@@ -151,6 +208,16 @@ def add_bag_to_hdf(bag, annotations, hdfroot, demo_name):
         manip_names = ["leftarm", "rightarm"]
         
         add_kinematics_to_group(group, link_names, manip_names, special_joint_names, robot)
+
+        effs = np.array(compute_end_effector_forces(jacobians_ds, efforts_arm_ds))
+        group["end_effector_forces"] = effs
+
+
+
+
+
+
+        
 
 def get_video_frames(video_dir, frame_stamps):
     video_stamps = np.loadtxt(osp.join(video_dir,"stamps.txt"))

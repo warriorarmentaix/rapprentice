@@ -4,13 +4,13 @@ import time
 
 import roslib
 import rospy
-from hd_utils import conversions
 import math
 import rospy
 roslib.load_manifest('joint_states_listener')
 from joint_states_listener.srv import ReturnJointStates
 roslib.load_manifest('jacobian_listener')
 from jacobian_listener.srv import ReturnJacobian
+
 from std_msgs.msg import Float64MultiArray
 
 
@@ -67,13 +67,14 @@ def call_return_jacobian():
     return (resp.jacobian)
 
 
-def compute_end_effector_force(J):
-  (position, velocity, effort) = call_return_joint_states(arm_joint_names)
+def compute_end_effector_force(J, effort):
   M = np.diag(np.array(joint_feedforward)) # Convert joint feedforward values into diagonal array
   M_inv = np.linalg.inv(M)
-
+  J = np.matrix(J)
   T = (np.matrix(effort)).T # Treat efforts as torques
-  F = np.linalg.inv((J*M_inv*J.T)) * J * M_inv * T
+
+  #F = np.linalg.inv((J*J.T)) * J  * T # Version without approx mass matrix
+  F = np.linalg.inv((J*M_inv*J.T)) * J * M_inv * T # Version with approximated mass matrix
   
   return F;
 
@@ -82,3 +83,20 @@ def compute_end_effector_velocity(J):
   dtheta = (np.matrix(velocity)).T
   dx = J * dtheta
   return dx
+
+
+
+def talker():
+    pub = rospy.Publisher('pr2_jacobian', Float64MultiArray)
+    rospy.init_node('talker', anonymous=True)
+    r = rospy.Rate(100) # 10hz
+    while not rospy.is_shutdown():
+        j = Float64MultiArray()
+        j.data = (np.array(call_return_jacobian()))
+        pub.publish(j)
+        r.sleep()
+
+if __name__ == '__main__':
+    try:
+        talker()
+    except rospy.ROSInterruptException: pass

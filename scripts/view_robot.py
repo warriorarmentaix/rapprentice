@@ -11,6 +11,8 @@ import roslib
 roslib.load_manifest("tf")
 import tf
 import rospy
+from std_msgs.msg import Header
+from geometry_msgs.msg import Vector3Stamped, Vector3
 import pylab
 from pylab import *
 import time
@@ -42,7 +44,7 @@ viewer.SetTransparency(body,0.4)
 
 
 rospy.init_node('force_torque_velocity_visualization')
-
+pub = rospy.Publisher('end_effector_force', Vector3Stamped)
 listener = tf.TransformListener()
 time.sleep(1)
 
@@ -64,10 +66,16 @@ def update():
 
 	#Get end effector force & torque
 	J = np.matrix(np.resize(np.array(robot_states.call_return_jacobian()), (6, 7))) # Jacobian
-	eff_force = robot_states.compute_end_effector_force(J).T
+	eff_force = robot_states.compute_end_effector_force(J, arm_effort).T
 	eff_force =  np.array(eff_force)[0]
 	force = eff_force[:3]
 	torque = eff_force[3:]
+
+
+	# Publish force
+	header = Header()
+	header.stamp = rospy.Time.now()
+	pub.publish(Vector3Stamped(header,Vector3(force[0],force[1],force[2])))
 
 
 	# Plot end effector force & torque

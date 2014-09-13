@@ -2,10 +2,75 @@ import cloudprocpy
 from rapprentice import berkeley_pr2, clouds
 import cv2, numpy as np
 import skimage.morphology as skim
+import IPython
 DEBUG_PLOTS=True
 
 
 import numpy as np
+
+
+
+def extract_yellow(rgb, depth, T_w_k):
+    """
+    extract red points and grey points and downsample
+    """
+        
+    hsv = cv2.cvtColor(rgb, cv2.COLOR_BGR2HSV)
+    h = hsv[:,:,0]
+    s = hsv[:,:,1]
+    v = hsv[:,:,2]
+
+    hh = h[220:300, 550:580]
+    ss = s[220:300, 550:580]
+    vv = v[220:300, 550:580]
+
+    r = rgb[220:300, 550:580, :]
+    #cv2.imshow("r", r)
+    #cv2.waitKey()
+
+
+    #IPython.embed()
+
+
+
+
+    h_mask = (h>0) & (h<40)
+    s_mask = (s>20) & (s<90)
+    v_mask = (v>200) & (v<255)
+    yellow_mask = h_mask & s_mask & v_mask
+    
+    valid_mask = depth > 0
+    
+    xyz_k = clouds.depth_to_xyz(depth, berkeley_pr2.f)
+    xyz_w = xyz_k.dot(T_w_k[:3,:3].T) + T_w_k[:3,3][None,None,:]
+    
+    z = xyz_w[:,:,2]   
+    z0 = xyz_k[:,:,2]
+
+    height_mask = xyz_w[:,:,2] > .50 # TODO pass in parameter
+    
+    good_mask = yellow_mask & height_mask
+    good_mask =   skim.remove_small_objects(good_mask,min_size=64)
+
+    if DEBUG_PLOTS:
+        #cv2.imshow("z0",z0/z0.max())
+        #cv2.imshow("z",z/z.max())
+        cv2.imshow("hue", h_mask.astype('uint8')*255)
+        cv2.imshow("sat", s_mask.astype('uint8')*255)
+        cv2.imshow("val", v_mask.astype('uint8')*255)
+        #cv2.imshow("yellow", yellow_mask.astype('uint8')*255)
+        cv2.imshow("final",good_mask.astype('uint8')*255)
+        #cv2.imshow("small", small)
+        cv2.imshow("rgb", rgb)
+        cv2.waitKey()
+            
+        
+    
+
+    good_xyz = xyz_w[good_mask]
+    
+    return clouds.downsample(good_xyz, .0125)
+
 def extract_red_grey(rgb, depth, T_w_k):
     """
     extract red points and grey points and downsample
@@ -169,7 +234,6 @@ def filter_green(rgb, depth, T_w_k):
     v_mask = (v < 140)
     green_mask = h_mask & s_mask & v_mask
     green_filter = np.invert(green_mask)
-    
     valid_mask = depth > 0
     
     xyz_k = clouds.depth_to_xyz(depth, berkeley_pr2.f)
@@ -186,9 +250,6 @@ def filter_green(rgb, depth, T_w_k):
     if DEBUG_PLOTS:
         #cv2.imshow("z0",z0/z0.max())
         #cv2.imshow("z",z/z.max())
-        cv2.imshow("hue", h_mask.astype('uint8')*255)
-        cv2.imshow("sat", s_mask.astype('uint8')*255)
-        cv2.imshow("val", v_mask.astype('uint8')*255)
         cv2.imshow("final",good_mask.astype('uint8')*255)
         cv2.imshow("rgb", rgb)
         cv2.waitKey()

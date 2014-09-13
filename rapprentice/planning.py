@@ -1,5 +1,8 @@
 import openravepy,trajoptpy, numpy as np, json
+from rapprentice import colorize
 
+def redprint(msg):
+    print colorize.colorize(msg, "red", bold=True)
 
 def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj):
         
@@ -55,7 +58,7 @@ def plan_follow_traj(robot, manip_name, ee_link, new_hmats, old_traj):
     s = json.dumps(request)
     prob = trajoptpy.ConstructProblem(s, robot.GetEnv()) # create object that stores optimization problem
     result = trajoptpy.OptimizeProblem(prob) # do optimization
-    traj = result.GetTraj()    
+    traj = result.GetTraj()
         
     saver = openravepy.RobotStateSaver(robot)
     pos_errs = []
