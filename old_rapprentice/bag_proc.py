@@ -24,17 +24,15 @@ def extract_torques(bag):
 def extract_joints(bag):
     traj = []
     stamps = []
-    velocities = []
     efforts = []
     for (_, msg, _) in bag.read_messages(topics=['/joint_states']):  
         traj.append(msg.position)
-        velocities.append(msg.velocity)
         efforts.append(msg.effort)
         stamps.append(msg.header.stamp.to_sec())
     assert len(traj) > 0
     names = msg.name
     
-    return names, stamps, traj, velocities, efforts
+    return names, stamps, traj, efforts
 
 def select_with_names(values, names, selections):
     selected_values = []
@@ -50,6 +48,22 @@ def select_with_names(values, names, selections):
         sv = np.array(sv)
         selected_values.append(sv)
     return selected_values
+
+def extract_jacobians_r(bag):
+    jacobians = []
+    for (_, msg, _) in bag.read_messages(topics=['/pr2_jacobian_r']):
+        J = np.matrix(np.resize(np.array(msg.data), (6, 7)))
+        jacobians.append(J)
+    assert len(jacobians) > 0
+    return jacobians
+
+def extract_jacobians_l(bag):
+    jacobians = []
+    for (_, msg, _) in bag.read_messages(topics=['/pr2_jacobian_l']):
+        J = np.matrix(np.resize(np.array(msg.data), (6, 7)))
+        jacobians.append(J)
+    assert len(jacobians) > 0
+    return jacobians
 
 
 def compute_end_effector_forces(jacobians_ds, efforts_ds):
@@ -157,12 +171,11 @@ def get_robot():
     return robot
     
 def add_bag_to_hdf(bag, annotations, hdfroot, demo_name):
-    joint_names, stamps, traj, velocities, efforts = extract_joints(bag)
+    joint_names, stamps, traj, efforts = extract_joints(bag)
     traj = np.asarray(traj)
     stamps = np.asarray(stamps)
-    velocities = np.asarray(stamps)
     efforts = np.asarray(efforts)
-    accelerations = np.diff()
+
     #jacobians_r = extract_jacobians_r(bag)
     #jacobians_r = np.array(jacobians_r)
     #jacobians_l = extract_jacobians_l(bag)
@@ -186,8 +199,8 @@ def add_bag_to_hdf(bag, annotations, hdfroot, demo_name):
         traj_ds = traj[sample_inds,:]
         stamps_ds = stamps[sample_inds]
         efforts_ds = efforts[sample_inds]
-        efforts_r_arm = np.array(select_with_names(efforts_ds, joint_names, robot_states.r_arm_joint_names))
-        efforts_l_arm = np.array(select_with_names(efforts_ds, joint_names, robot_states.l_arm_joint_names))
+        efforts_r_arm_ds = np.array(select_with_names(efforts_ds, joint_names, robot_states.r_arm_joint_names))
+        efforts_l_arm_ds = np.array(select_with_names(efforts_ds, joint_names, robot_states.l_arm_joint_names))
 
 
 
