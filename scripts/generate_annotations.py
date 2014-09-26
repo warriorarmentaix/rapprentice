@@ -5,7 +5,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("bagfile")
 parser.add_argument("outfile")
 args = parser.parse_args()
-from rapprentice import bag_proc
+from old_rapprentice import bag_proc
 
 import yaml, rosbag
 

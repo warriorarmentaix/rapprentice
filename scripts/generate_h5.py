@@ -12,7 +12,6 @@ parser.add_argument("--cloud_proc_func", default="extract_red")
 parser.add_argument("--cloud_proc_mod", default="rapprentice.cloud_proc_funcs")
 parser.add_argument("--no_clouds")
 parser.add_argument("--clouds_only", action="store_true")
-parser.add_argument("--no_ds", action="store_true")
 args = parser.parse_args()
 
 
@@ -20,7 +19,7 @@ args = parser.parse_args()
 import os, os.path as osp
 import rosbag
 import h5py
-from rapprentice import bag_proc
+from old_rapprentice import bag_proc
 import yaml
 import importlib, inspect
 import numpy as np
@@ -55,7 +54,7 @@ else:
         bag = rosbag.Bag(bag_file)
         with open(ann_file, "r") as fh: annotations = yaml.load(fh)
     
-        bag_proc.add_bag_to_hdf(bag, annotations, hdf, demo_name, args.no_ds)
+        bag_proc.add_bag_to_hdf(bag, annotations, hdf, demo_name)
         bag_proc.add_rgbd_to_hdf(osp.join(task_dir, video_dir), annotations, hdf, demo_name)
     
     

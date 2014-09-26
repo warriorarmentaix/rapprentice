@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+from rapprentice import util
 usage="""
 
 Run in simulation with a translation and a rotation of fake data:
@@ -13,15 +14,45 @@ Actually run on the robot without pausing or animating
 ./do_task.py ~/Data/overhand2/all.h5 --execution=1 --animation=0
 
 """
-parser = argparse.ArgumentParser(usage=usage)
+# parser = argparse.ArgumentParser(usage=usage)
+# parser.add_argument("h5file", type=str)
+# parser.add_argument("--cloud_proc_func", default="filter_green")
+# parser.add_argument("--cloud_proc_mod", default="rapprentice.cloud_proc_funcs")
+# parser.add_argument("--useJK", type=int, default=0)
+# parser.add_argument("--execution", type=int, default=0)
+# parser.add_argument("--animation", type=int, default=0)
+# parser.add_argument("--parallel", type=int, default=1)
+# parser.add_argument("--pid", type=int, default=0)
+
+# parser.add_argument("--prompt", action="store_true")
+# parser.add_argument("--show_neighbors", action="store_true")
+# parser.add_argument("--select_manual", action="store_true")
+# parser.add_argument("--log", action="store_true")
+# parser.add_argument("--no_ds", action="store_true")
+# parser.add_argument("--trajopt_ds", type=int, default=10)
+# parser.add_argument("--visualize", action="store_true")
+
+# parser.add_argument("--use_force", type=int, default=0)
+
+# parser.add_argument("--fake_data_segment",type=str)
+# parser.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
+#     default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
+
+# parser.add_argument("--interactive",action="store_true")
+
+
+
+parser = util.ArgumentParser()
+    
+
+
 parser.add_argument("h5file", type=str)
 parser.add_argument("--cloud_proc_func", default="filter_green")
-parser.add_argument("--cloud_proc_mod", default="rapprentice.cloud_proc_funcs")
-    
+parser.add_argument("--cloud_proc_mod", default="old_rapprentice.cloud_proc_funcs")
+parser.add_argument("--useJK", type=int, default=0)
 parser.add_argument("--execution", type=int, default=0)
-parser.add_argument("--animation", type=int, default=0)
+#parser.add_argument("--animation", type=int, default=0)
 parser.add_argument("--parallel", type=int, default=1)
-parser.add_argument("--pid", type=int, default=0)
 
 parser.add_argument("--prompt", action="store_true")
 parser.add_argument("--show_neighbors", action="store_true")
@@ -30,20 +61,60 @@ parser.add_argument("--log", action="store_true")
 parser.add_argument("--no_ds", action="store_true")
 parser.add_argument("--trajopt_ds", type=int, default=10)
 parser.add_argument("--visualize", action="store_true")
+parser.add_argument("--kinematics", action="store_true")
+parser.add_argument("--force", action="store_true")
+parser.add_argument("--pr2", action="store_true")
+parser.add_argument("--multiplier", type=int, default=10)
 
-parser.add_argument("--use_force", type=int, default=0)
 
-parser.add_argument("--fake_data_segment",type=str)
-parser.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
+
+#parser.add_argument("--interactive",action="store_true")
+
+
+
+
+
+parser.add_argument("--animation", type=int, default=0, help="animates if it is non-zero. the viewer is stepped according to this number")
+parser.add_argument("--interactive", action="store_true", help="step animation and optimization if specified")
+parser.add_argument("--camera_matrix_file", type=str, default='../.camera_matrix.txt')
+parser.add_argument("--window_prop_file", type=str, default='../.win_prop.txt')
+parser.add_argument("--std_dev", type=float, default=1, help="number of standard deviations plotted for the covariance")
+
+subparsers = parser.add_subparsers(dest='subparser_name')
+parser_eval = subparsers.add_parser('eval')
+
+parser_eval.add_argument('actionfile', type=str)
+parser_eval.add_argument("reg_type", type=str, choices=['segment', 'rpm', 'bij'], default='bij')
+parser_eval.add_argument("--downsample_size", type=float, default=0.025)
+
+parser_eval.add_argument("--fake_data_segment",type=str, default='knot2handstester0_seg00')
+parser_eval.add_argument("--fake_data_transform", type=float, nargs=6, metavar=("tx","ty","tz","rx","ry","rz"),
     default=[0,0,0,0,0,0], help="translation=(tx,ty,tz), axis-angle rotation=(rx,ry,rz)")
+parser_eval.add_argument("--gpu", action="store_true", default=False)
 
-parser.add_argument("--interactive",action="store_true")
+parser_eval.add_argument("--beta_pos", type=float, default=1000000.0)
+parser_eval.add_argument("--beta_rot", type=float, default=100.0)
+parser_eval.add_argument("--gamma", type=float, default=1000.0)
+parser_eval.add_argument("--use_collision_cost", type=int, default=1)
+
+parser_eval.add_argument("--pos_coef", type=float, default=1, help="coefficient for dtw position cost")
+parser_eval.add_argument("--rot_coef", type=float, default=.1, help="coefficient for dtw rotation cost")
+parser_eval.add_argument("--pos_vel_coef", type=float, default=0, help="coefficient for dtw position velocity cost")
+parser_eval.add_argument("--rot_vel_coef", type=float, default=0, help="coefficient for dtw rotation velocity cost")
+parser_eval.add_argument("--force_coef", type=float, default=1, help="coefficient for dtw force cost")
+parser_eval.add_argument("--torque_coef", type=float, default=1, help="coefficient for dtw torque cost")
+
+parser_eval.add_argument("--downsample_traj", type=int, default=1, help="downsample demonstration trajectory by this factor")
+parser_eval.add_argument("--max_num_demos", type=int, default=10, help="maximum number of demos to combine")
 
 args = parser.parse_args()
 
-if args.fake_data_segment is None: assert args.execution==1
+#if args.fake_data_segment is None: assert args.execution==1
 
 ###################
+
+
+
 
 
 """
@@ -65,14 +136,13 @@ If you're using fake data, don't update it.
 """
 
 
-from rapprentice import registration, colorize, berkeley_pr2, \
-     animate_traj, ros2rave, plotting_openrave, task_execution, \
-     planning, tps, func_utils, resampling, clouds, conversions as conv, retiming
-from rapprentice import math_utils as mu
-from rapprentice.yes_or_no import yes_or_no
+
+
+
+from old_rapprentice import math_utils as mu
 
 try:
-    from rapprentice import pr2_trajectories, PR2, robot_states
+    from old_rapprentice import pr2_trajectories, PR2, robot_states
     import rospy
 except ImportError:
     print "Couldn't import ros stuff"
@@ -83,175 +153,35 @@ from numpy import asarray
 import numpy as np
 import cPickle as pickle
 import importlib
-from std_msgs.msg import Float64MultiArray, String
+from std_msgs.msg import Float64MultiArray, String, Float32
+from old_rapprentice import registration, colorize, berkeley_pr2, \
+     animate_traj, ros2rave, plotting_openrave, task_execution, \
+     planning, tps, func_utils, resampling, clouds, conversions as conv, retiming, \
+     robot_states
+import analyze_data as analyze_data
+
+from core import sim_util, demonstration
+from core.demonstration import SceneState, AugmentedTrajectory, Demonstration
 
 cloud_proc_mod = importlib.import_module(args.cloud_proc_mod)
 cloud_proc_func = getattr(cloud_proc_mod, args.cloud_proc_func)
+
+
+import IPython
         
     
 def redprint(msg):
     print colorize.colorize(msg, "red", bold=True)
     
-def split_trajectory_by_gripper(seg_info):
-    rgrip = asarray(seg_info["r_gripper_joint"])
-    lgrip = asarray(seg_info["l_gripper_joint"])
 
-    thresh = .04 # open/close threshold
-
-    n_steps = len(lgrip)
+def print_matrix(m):
+    for i in range(m.shape[0]):
+        print [str(m[i,j]) for j in range(m.shape[1])]
 
 
-    # indices BEFORE transition occurs
-    l_openings = np.flatnonzero((lgrip[1:] >= thresh) & (lgrip[:-1] < thresh))
-    r_openings = np.flatnonzero((rgrip[1:] >= thresh) & (rgrip[:-1] < thresh))
-    l_closings = np.flatnonzero((lgrip[1:] < thresh) & (lgrip[:-1] >= thresh))
-    r_closings = np.flatnonzero((rgrip[1:] < thresh) & (rgrip[:-1] >= thresh))
-
-    before_transitions = np.r_[l_openings, r_openings, l_closings, r_closings]
-    after_transitions = before_transitions+1
-    seg_starts = np.unique(np.r_[0, after_transitions])
-    seg_ends = np.unique(np.r_[before_transitions, n_steps-1])
-
-    return seg_starts, seg_ends
-
-def binarize_gripper(angle):
-    open_angle = .08
-    closed_angle = 0    
-    thresh = .04
-    if angle > thresh: return open_angle
-    else: return closed_angle
-
-
-    
-
-    
 def set_gripper_maybesim(lr, value):
-    if args.execution:
-        gripper = {"l":Globals.pr2.lgrip, "r":Globals.pr2.rgrip}[lr]
-        gripper.set_angle(value)
-        Globals.pr2.join_all()
-    else:
-        Globals.robot.SetDOFValues([value*5], [Globals.robot.GetJoint("%s_gripper_l_finger_joint"%lr).GetDOFIndex()])
-    return True
-        
-def exec_traj_maybesim(bodypart2traj):
-    if args.animation:
-        dof_inds = []
-        trajs = []
-        for (part_name, traj) in bodypart2traj.items():
-            manip_name = {"larm":"leftarm","rarm":"rightarm"}[part_name]
-            dof_inds.extend(Globals.robot.GetManipulator(manip_name).GetArmIndices())            
-            trajs.append(traj)
-        full_traj = np.concatenate(trajs, axis=1)
-        Globals.robot.SetActiveDOFs(dof_inds)
-        animate_traj.animate_traj(full_traj, Globals.robot, restore=False,pause=True)
-    if args.execution:
-        if not args.prompt or yes_or_no("execute?"):
-            pr2_trajectories.follow_body_traj(Globals.pr2, bodypart2traj)
-        else:
-            return False
-
-    return True
-
-
-def find_closest_manual(demofile, _new_xyz):
-    "for now, just prompt the user"
-    seg_names = demofile.keys()
-    print "choose from the following options (type an integer)"
-    for (i, seg_name) in enumerate(seg_names):
-        print "%i: %s"%(i,seg_name)
-    choice_ind = task_execution.request_int_in_range(len(seg_names))
-    chosen_seg = seg_names[choice_ind] 
-    return chosen_seg
-
-def registration_cost(xyz0, xyz1):
-    scaled_xyz0, _ = registration.unit_boxify(xyz0)
-    scaled_xyz1, _ = registration.unit_boxify(xyz1)
-    f,g = registration.tps_rpm_bij(scaled_xyz0, scaled_xyz1, rot_reg=1e-3, n_iter=30)
-    cost = registration.tps_reg_cost(f) + registration.tps_reg_cost(g)
-    return cost
-
-DS_SIZE = .025
-
-@func_utils.once
-def get_downsampled_clouds(demofile):
-    return [clouds.downsample(seg["cloud_xyz"], DS_SIZE) for seg in demofile.values()]
-
-def find_closest_auto(demofile, new_xyz):
-    if args.parallel:
-        from joblib import Parallel, delayed
-    demo_clouds = [asarray(seg["cloud_xyz"]) for seg in demofile.values()]
-    keys = demofile.keys()
-    if args.parallel:
-        costs = Parallel(n_jobs=3,verbose=100)(delayed(registration_cost)(demo_cloud, new_xyz) for demo_cloud in demo_clouds)
-    else:
-        costs = []
-        for (i,ds_cloud) in enumerate(demo_clouds):
-            costs.append(registration_cost(ds_cloud, new_xyz))
-            print "completed %i/%i"%(i+1, len(demo_clouds))
-    
-    print "costs\n",costs
-    if args.show_neighbors:
-        nshow = min(5, len(keys))
-        import cv2, rapprentice.cv_plot_utils as cpu
-        sortinds = np.argsort(costs)[:nshow]
-        near_rgbs = [asarray(demofile[keys[i]]["rgb"]) for i in sortinds]
-        bigimg = cpu.tile_images(near_rgbs, 1, nshow)
-        cv2.imshow("neighbors", bigimg)
-        print "press any key to continue"
-        cv2.waitKey()
-        
-    ibest = np.argmin(costs)
-    return keys[ibest]
-            
-            
-def arm_moved(joint_traj):    
-    if len(joint_traj) < 2: return False
-    return ((joint_traj[1:] - joint_traj[:-1]).ptp(axis=0) > .01).any()
-        
-def tpsrpm_plot_cb(x_nd, y_md, targ_Nd, corr_nm, wt_n, f):
-    ypred_nd = f.transform_points(x_nd)
-    handles = []
-    handles.append(Globals.env.plot3(ypred_nd, 3, (0,1,0)))
-    handles.extend(plotting_openrave.draw_grid(Globals.env, f.transform_points, x_nd.min(axis=0), x_nd.max(axis=0), xres = .1, yres = .1, zres = .04))
-    Globals.viewer.Step()
-
-
-def unif_resample(traj, max_diff, wt = None):        
-    """
-    Resample a trajectory so steps have same length in joint space    
-    """
-    import scipy.interpolate as si
-    tol = .005
-    if wt is not None: 
-        wt = np.atleast_2d(wt)
-        traj = traj*wt
-        
-        
-    dl = mu.norms(traj[1:] - traj[:-1],1)
-    l = np.cumsum(np.r_[0,dl])
-    goodinds = np.r_[True, dl > 1e-8]
-    deg = min(3, sum(goodinds) - 1)
-    if deg < 1: return traj, np.arange(len(traj))
-    
-    nsteps = max(int(np.ceil(float(l[-1])/max_diff)),2)
-    newl = np.linspace(0,l[-1],nsteps)
-
-    ncols = traj.shape[1]
-    colstep = 10
-    traj_rs = np.empty((nsteps,ncols)) 
-    for istart in xrange(0, traj.shape[1], colstep):
-        (tck,_) = si.splprep(traj[goodinds, istart:istart+colstep].T,k=deg,s = tol**2*len(traj),u=l[goodinds])
-        traj_rs[:,istart:istart+colstep] = np.array(si.splev(newl,tck)).T
-    if wt is not None: traj_rs = traj_rs/wt
-
-    newt = np.interp(newl, l, np.arange(len(traj)))
-
-    return traj_rs, newt
-
-
-###################
-
+    gripper = {"l":Globals.pr2.lgrip, "r":Globals.pr2.rgrip}[lr]
+    gripper.set_angle(value)
 
 class Globals:
     robot = None
@@ -262,15 +192,6 @@ class Globals:
     pub = None
 
 def main():
-    import IPython
-    demofile = h5py.File(args.h5file, 'r')
-    trajoptpy.SetInteractive(args.interactive)
-
-
-    if args.log:
-        LOG_DIR = osp.join(osp.expanduser("~/Data/do_task_logs"), datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))
-        os.mkdir(LOG_DIR)
-        LOG_COUNT = 0
                         
 
     if args.execution:
@@ -285,316 +206,418 @@ def main():
         Globals.env.Load("robots/pr2-beta-static.zae")    
         Globals.robot = Globals.env.GetRobots()[0]
 
-    if not args.fake_data_segment:
+    if not args.eval.fake_data_segment:
         grabber = cloudprocpy.CloudGrabber()
         grabber.startRGBD()
 
     Globals.viewer = trajoptpy.GetViewer(Globals.env)
 
-    #####################
 
-    while True:
-        
     
-        redprint("Acquire point cloud")
-        if args.fake_data_segment:
-            fake_seg = demofile[args.fake_data_segment]
-            new_xyz = np.squeeze(fake_seg["cloud_xyz"])
-            hmat = openravepy.matrixFromAxisAngle(args.fake_data_transform[3:6])
-            hmat[:3,3] = args.fake_data_transform[0:3]
-            new_xyz = new_xyz.dot(hmat[:3,:3].T) + hmat[:3,3][None,:]
-            r2r = ros2rave.RosToRave(Globals.robot, asarray(fake_seg["joint_states"]["name"]))
-            r2r.set_values(Globals.robot, asarray(fake_seg["joint_states"]["position"][0]))
-            #Globals.pr2.head.set_pan_tilt(0,1.2)
-            #Globals.pr2.rarm.goto_posture('side')
-            #Globals.pr2.larm.goto_posture('side')            
-            #Globals.pr2.join_all()
-            #time.sleep(2)
+    
+    demos = analyze_data.setup_demos(args)
+    trajoptpy.SetInteractive(args.interactive)
+    lfd_env, sim = analyze_data.setup_lfd_environment_sim(args, demos)
+    reg_factory = analyze_data.setup_registration(args, demos, sim)
+    
+
+
+    # for now, use the cloud of the first demo as the current cloud
+    if args.pr2:
+        grabber = cloudprocpy.CloudGrabber()
+        grabber.startRGBD()
+        rgb, depth = grabber.getRGBD()
+        T_w_k = berkeley_pr2.get_kinect_transform(Globals.robot)
+        full_cloud = cloud_proc_func(rgb, depth, T_w_k)
+    else:
+        full_cloud = demos.values()[0].scene_state.cloud
+
+    scene_state = demonstration.SceneState(full_cloud, downsample_size=args.eval.downsample_size)
+
+    regs, demos = analyze_data.register_scenes(reg_factory, scene_state)
+    
+    trajectory_transferer = analyze_data.MultipleDemosPoseTrajectoryTransferer(sim, args.eval.pos_coef, args.eval.rot_coef, args.eval.pos_vel_coef, args.eval.rot_vel_coef, args.eval.force_coef, args.eval.torque_coef, 
+                                                                  args.eval.beta_pos, args.eval.beta_rot, args.eval.gamma, args.eval.use_collision_cost, 
+                                                                  downsample_traj=args.eval.downsample_traj)
+    n_demos = min(args.eval.max_num_demos, len(reg_factory.demos))
+    aug_traj = trajectory_transferer.transfer(regs[:n_demos], demos[:n_demos], plotting=args.animation, plotting_std_dev=args.std_dev)
+    
+    
+
+    
+    #import cPickle as pickle
+    """
+    data_file = open("data.pickle", 'wa')
+    data = {}
+    data['cloud'] = full_cloud
+    data['traj'] = aug_traj
+    pickle.dump(data, data_file)
+    data_file.close()
+    IPython.embed()
+    """
+    """
+    data_file = open("data.pickle", 'r')
+    data = pickle.load(data_file)
+    aug_traj = data['traj']
+    full_cloud = data['cloud']
+
+
+    IPython.embed()
+    """
+
+
+
+    covariance = {}
+    covariances = {}
+
+    covariances['l'] = []
+    covariances['r'] = []
+    
+    import h5py
+    right = h5py.File("../../../Downloads/covars_left.h5")
+    covariances['r'] = right['covars']
+    left = h5py.File("../../../Downloads/covars.h5")
+    covariances['l'] = left['covars']
+    
+
+
+    """
+    import cPickle
+    data_file = open("costs.pkl", 'r')
+    data = pickle.load(data_file)
+    lr2Cts = data['lr2Cts']
+    lr2cts = data['lr2cts']
+    covariances['l'] = lr2Cts['l']
+    covariances['r'] = lr2Cts['r']
+    """
+    length_part = min(covariances['r'].shape[0], covariances['l'].shape[0], aug_traj.lr2dof_mu_traj['r'].shape[0], aug_traj.lr2arm_traj['r'].shape[0], aug_traj.lr2close_finger_traj['l'].shape[0], aug_traj.lr2open_finger_traj['l'].shape[0], aug_traj.lr2dof_sigma_traj['l'].shape[0])
+
+
+    gripper_part = []
+    for i in range(length_part):
+        if aug_traj.lr2close_finger_traj['r'][i]:
+            gripper_part.append(-1.0)
+        elif aug_traj.lr2open_finger_traj['r'][i]:
+            gripper_part.append(1.0)
+        elif aug_traj.lr2close_finger_traj['l'][i]:
+            gripper_part.append(-2.0)
+        elif aug_traj.lr2open_finger_traj['r'][i]:
+            gripper_part.append(1.0)
         else:
-            #Globals.pr2.head.set_pan_tilt(0,1.2)
-            #Globals.pr2.rarm.goto_posture('side')
-            #Globals.pr2.larm.goto_posture('side')            
-            #Globals.pr2.join_all()
-            #time.sleep(2)
+            gripper_part.append(0.0)
 
-            
-            Globals.pr2.update_rave()
-            
-            rgb, depth = grabber.getRGBD()
-            T_w_k = berkeley_pr2.get_kinect_transform(Globals.robot)
-            new_xyz = cloud_proc_func(rgb, depth, T_w_k)
-            print "got new xyz"
-            redprint(new_xyz)
-            #grab_end(new_xyz)
 
+    """
+    Covariance diag averages for when the arm is moving freely
+         5.67193641e-03,   1.29050216e-02,   1.31052249e-03,
+         3.02826704e-01,   1.15117729e-01,   2.49747355e-01,
+         4.78830682e-07,   4.51310940e-07,   6.50562967e-08,
+         4.61426095e-07,   6.83632264e-07,   3.60633106e-06,
+         4.29387966e+01,   2.18745951e+01,   9.47029488e+00,
+         2.95483087e-01,   8.96258053e-01,   3.61227108e-02
+    """
+
+
+
+
+    #covariances from averages of freely moving arm, with multipler
+
+    """
+    for lr in 'lr':
+        covariance[lr] = np.diag([6e-3, 1e-2, 1e-3, 3e-1, 1e-1, 2e-1, 5e-7, 5e-7, 7e-8, 5e-7, 7e-7, 4e-6, 4e1, 2e1, 9, 3e-1, 9e-1, 4e-2])
+
+    covariances['l'] = [covariance['l'] + lam * np.eye(18) for i in range(length_part)]
+    covariances['r'] = [covariance['r'] + lam * np.eye(18) for i in range(length_part)]
+    """
+
+
+
+
+
+    """
+    pad = 1e-1 * np.eye(18)
+    pad[6:12, 6:12] = pad[6:12, 6:12] + 1.0*np.eye(6)
+    for i in range(length_part):
+        covariances['l'].append(np.diag(np.diag(aug_traj.lr2dof_sigma_traj['l'][i])) + pad)
+        covariances['r'].append(np.diag(np.diag(aug_traj.lr2dof_sigma_traj['r'][i])) + pad)
+    """
     
-        if args.log:
-            LOG_COUNT += 1
-            import cv2
-            cv2.imwrite(osp.join(LOG_DIR,"rgb%i.png"%LOG_COUNT), rgb)
-            cv2.imwrite(osp.join(LOG_DIR,"depth%i.png"%LOG_COUNT), depth)
-            np.save(osp.join(LOG_DIR,"xyz%i.npy"%LOG_COUNT), new_xyz)
-        
-
-        
 
 
-        ################################    
-        redprint("Finding closest demonstration")
-        if args.select_manual:
-            seg_name = find_closest_manual(demofile, new_xyz)
-        else:
-            seg_name = find_closest_auto(demofile, new_xyz)
-        
-        seg_info = demofile[seg_name]
-        redprint("closest demo: %s"%(seg_name))
-        if "done" in seg_name:
-            redprint("DONE!")
-            break
+
+
+    covariances['r'] = covariances['r'][0:length_part]
+    covariances['l'] = covariances['l'][0:length_part]
+
+    F_part = {}
+    traj_part = {}
+    for lr in 'lr':
+        F_part[lr] = aug_traj.lr2dof_mu_traj[lr][0:length_part,12:18]
+        traj_part[lr] = aug_traj.lr2arm_traj[lr][0:length_part,:]
+
+
+    redprint("Press enter to use current position as starting point")
+    raw_input()
+    arm_positions = {}
+    (arm_position, arm_velocity, arm_effort) = robot_states.call_return_joint_states(robot_states.r_arm_joint_names)
+    arm_positions['r'] = arm_position
+    diff_r = np.array(arm_position - traj_part['r'][0,:])
+    maximum_r = max(abs(diff_r))
+    (arm_position, arm_velocity, arm_effort) = robot_states.call_return_joint_states(robot_states.l_arm_joint_names)
+    arm_positions['l'] = arm_position
+    diff_l = np.array(arm_position - traj_part['l'][0,:])
+    maximum_l = max(abs(diff_l))
+    maximum = max(maximum_l, maximum_r)
+
+    speed = (20.0/360.0*2*(np.pi))
+    time_needed = maximum / speed
     
-    
-        if args.log:
-            with open(osp.join(LOG_DIR,"neighbor%i.txt"%LOG_COUNT),"w") as fh: fh.write(seg_name) 
-        ################################
+    F = {}
+    traj = {}
+    gripper = {}
+    for lr in 'lr':
+        initial_pos_traj = mu.interp2d(np.arange(0, time_needed, 0.01), np.array([0,time_needed]), np.array([arm_positions[lr], traj_part[lr][0,:]]))
+        initial_force_traj = np.array([np.zeros(6) for i in range(initial_pos_traj.shape[0])])
+        initial_traj_length = initial_pos_traj.shape[0]
 
-
-
-        ### Old end effector forces at r_gripper_tool_frame (eliminating the torques for now)
-        old_eefs = seg_info['end_effector_forces'][:,0:3,:]
-
-
-        redprint("Generating end-effector trajectory")    
-
-        handles = []
-        old_xyz = np.squeeze(seg_info["cloud_xyz"])
-       
-
-
-        scaled_old_xyz, src_params = registration.unit_boxify(old_xyz)
-        scaled_new_xyz, targ_params = registration.unit_boxify(new_xyz)        
-        f,_ = registration.tps_rpm_bij(scaled_old_xyz, scaled_new_xyz, plot_cb = tpsrpm_plot_cb,
-                                       plotting=5 if args.animation else 0,rot_reg=np.r_[1e-4,1e-4,1e-1], n_iter=50, reg_init=10, reg_final=.1)
-        f = registration.unscale_tps(f, src_params, targ_params)
+        traj[lr] = np.concatenate((initial_pos_traj, traj_part[lr]), axis=0)
+        F[lr] = np.concatenate((initial_force_traj, F_part[lr]), axis=0)
         
-        old_xyz_transformed = f.transform_points(old_xyz)
+    initial_gripper_traj = np.array([0.0 for i in range(initial_pos_traj.shape[0])])
+    gripper = np.concatenate((initial_gripper_traj, gripper_part), axis=0)
 
-        #handles.append(Globals.env.plot3(old_xyz_transformed,5, np.array([(0,0,1,1) for i in old_xyz_transformed])))
+    if args.visualize:
+        demofile = h5py.File(args.h5file, 'r')
+        seg_info = demofile[demofile.keys()[0]]
+        r2r = ros2rave.RosToRave(Globals.robot, asarray(seg_info["joint_states"]["name"]))
+        r2r.set_values(Globals.robot, asarray(seg_info["joint_states"]["position"][200]))
 
-        handles.extend(plotting_openrave.draw_grid(Globals.env, f.transform_points, old_xyz.min(axis=0)-np.r_[0,0,.1], old_xyz.max(axis=0)+np.r_[0,0,.1], xres = .1, yres = .1, zres = .04))        
-
-        link2eetraj = {}
-        for lr in 'r':
-            link_name = "%s_gripper_tool_frame"%lr
-            old_ee_traj = asarray(seg_info[link_name]["hmat"])
-            new_ee_traj = f.transform_hmats(old_ee_traj)
-            link2eetraj[link_name] = new_ee_traj
-            #print old_ee_traj
-            old_ee_pos = old_ee_traj[:,0:3,3]
-            #print old_ee_pos
-
-            # End effector forces as oppossed to end effector trajectories
-            dfdxs = f.compute_jacobian(old_ee_pos)
-            new_eefs = []
-            for i in xrange(len(old_eefs)):
-                dfdx = np.matrix(dfdxs[i])
-                old_eef = np.matrix(old_eefs[i])
-                new_eefs.append(dfdx * old_eef)
-            old_eefs = asarray(old_eefs)[:,:,0]
-            new_eefs = asarray(new_eefs)[:,:,0]
-
-            force_data = {}
-            force_data['old_eefs'] = old_eefs
-            force_data['new_eefs'] = new_eefs
-            force_file = open("trial.pickle", 'wa')
-            pickle.dump(force_data, force_file)
-            force_file.close()
-            new_ee_traj_x = new_ee_traj
-            
-        
-        miniseg_starts, miniseg_ends = split_trajectory_by_gripper(seg_info)    
-        success = True
-        
-        
-        print colorize.colorize("mini segments:", "red"), miniseg_starts, miniseg_ends
-        for (i_miniseg, (i_start, i_end)) in enumerate(zip(miniseg_starts, miniseg_ends)):
-            
-            if args.execution=="real": Globals.pr2.update_rave()
-
-
-            ################################    
-            redprint("Generating joint trajectory for segment %s, part %i"%(seg_name, i_miniseg))
-            
-            
-            
-            # figure out how we're gonna resample stuff
-            lr2oldtraj = {}
-            for lr in 'r':
+        for i in range(0, traj['l'].shape[0], 30):
+            for lr in 'lr':
+                handles = []
+                handles.append(Globals.env.plot3(full_cloud,5,np.array([(0,1,0,1) for x in full_cloud])))
                 manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
-                old_joint_traj = asarray(seg_info[manip_name][i_start:i_end+1])
-                #print (old_joint_traj[1:] - old_joint_traj[:-1]).ptp(axis=0), i_start, i_end
-                #if arm_moved(old_joint_traj): NOT SURE WHY BUT THIS IS RETURNING FALSE
-                lr2oldtraj[lr] = old_joint_traj
+                vals = traj[lr][i,:]
+                Globals.robot.SetDOFValues(vals, Globals.robot.GetManipulator(manip_name).GetArmIndices())
+            
+                hmats_index = {"l":-28, "r":-3}
+                hmats = Globals.robot.GetLinkTransformations()
+                trans, rot = conv.hmat_to_trans_rot(hmats[hmats_index[lr]])
+                f_start = np.array([0,0,0]) + trans
+                f_end = F[lr][i][0:3]/100 + trans
+                handles.append(Globals.env.drawlinestrip(np.array([f_start, f_end]), 10, (1,0,0,1)))
+                Globals.viewer.Step()
+            
+            redprint(i)
+            Globals.viewer.Idle()
 
-            if args.visualize:
-                    r2r = ros2rave.RosToRave(Globals.robot, asarray(seg_info["joint_states"]["name"]))
-                    r2r.set_values(Globals.robot, asarray(seg_info["joint_states"]["position"][0]))
-                    for i in range(0, lr2oldtraj['r'].shape[0], 10):
-                        handles = []
-                        handles.append(Globals.env.plot3(new_xyz,5,np.array([(0,1,0,1) for x in new_xyz])))
-                        handles.append(Globals.env.plot3(old_xyz,5,np.array([(1,0,0,1) for x in old_xyz])))
-                        handles.append(Globals.env.drawlinestrip(old_ee_traj[:,:3,3], 2, (1,0,0,1)))
-                        # Setting robot arm to joint trajectory
-                        r_vals = lr2oldtraj['r'][i,:]
-                        Globals.robot.SetDOFValues(r_vals, Globals.robot.GetManipulator('rightarm').GetArmIndices())
-                        # Plotting forces from r_gripper_tool_frame
-                        hmats = Globals.robot.GetLinkTransformations()
-                        trans, rot = conv.hmat_to_trans_rot(hmats[-3])
-                        f_start = np.array([0,0,0]) + trans
-                        f_end = np.array(old_eefs[i])/100 + trans
-                        handles.append(Globals.env.drawlinestrip(np.array([f_start, f_end]), 10, (1,0,0,1)))
-                        
-                        redprint(i)
-                        Globals.viewer.Step()
-            if len(lr2oldtraj) > 0:
-                old_total_traj = np.concatenate(lr2oldtraj.values(), 1)
-                JOINT_LENGTH_PER_STEP = .1
-                # FIRST RESAMPLING HAPPENS HERE: JOINT_LENGTH
-                _, timesteps_rs = unif_resample(old_total_traj, JOINT_LENGTH_PER_STEP) # Timesteps only, can use to inter eefs for first time
-            ####
-            new_eefs_segment = asarray(new_eefs[i_start:i_end+1,:]) # Extract miniseg, and re-sample
 
-            if args.no_ds:
-                new_eefs_segment_rs = new_eefs_segment
+
+
+    pgains = np.asarray([2400.0, 1200.0, 1000.0, 700.0, 300.0, 300.0, 300.0])
+    dgains = np.asarray([18.0, 10.0, 6.0, 4.0, 6.0, 4.0, 4.0])
+    pgainsdiag = np.diag(np.asarray([-2400.0, -1200.0, -1000.0, -700.0, -300.0, -300.0, -300.0]))
+    dgainsdiag = np.diag(np.asarray([-18.0, -10.0, -6.0, -4.0, -6.0, -4.0, -4.0]))
+    m = np.array([3.33, 1.16, 0.1, 0.25, 0.133, 0.0727, 0.0727]) * 2 # masses in joint space (feed forward)
+
+
+    length_total = F['l'].shape[0]
+
+
+    costs = {}
+    JKpJ = {}
+    JKvJ = {}
+
+    for lr in 'lr':
+        redprint(lr)
+        costs[lr] = []
+        JKpJ[lr] = []
+        JKvJ[lr] = []
+
+        for i in range(length_part):
+            #costs[lr].append(np.linalg.inv(covariances[lr][i]))
+            costs[lr].append(covariances[lr][i])
+
+        Ms = []
+        allCs = []
+
+        manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
+        arm = Globals.robot.GetManipulator(manip_name)
+        jacobians = []
+        for i in range(traj[lr].shape[0]):
+            vals = traj[lr][i,:]
+            Globals.robot.SetDOFValues(vals, Globals.robot.GetManipulator(manip_name).GetArmIndices())
+            jacobians.append(np.vstack((arm.CalculateJacobian(), arm.CalculateAngularVelocityJacobian())))
+        jacobians = asarray(jacobians)
+
+        for t in range(length_part):
+            M = np.zeros((18, 21))
+            J = jacobians[t]
+            M[0:6,0:7] = J
+            M[6:12,7:14] = J
+            mdiag = np.diag(m) # Convert joint feedforward values into diagonal array
+            mdiag_inv = np.linalg.inv(mdiag)
+            M[12:18,14:21] = np.linalg.inv((J.dot(mdiag_inv).dot(np.transpose(J)))).dot(J).dot(mdiag_inv)
+            Ms.append(M)
+
+        for t in range(length_part):
+            topad = np.zeros((21,21))
+            topad[0:7,0:7] = np.diag(pgains) * 0.001
+            topad[7:14,7:14] = np.diag(dgains) * 0.001
+            topad[14:21,14:21] = np.eye(7) * 0.001
+            #allCs.append(np.transpose(Ms[t]).dot(Ct).dot(Ms[t]) + topad)
+            allCs.append(np.transpose(Ms[t]).dot(costs[lr][t]).dot(Ms[t]) + topad)
+
+
+        Kps = []
+        Kvs = []
+        Ks = []
+        Qt = None
+        Vs = []
+        for t in range(length_part-1, -1, -1):
+            if Qt is None:
+                Qt = allCs[t]
             else:
-                new_eefs_segment_rs = mu.interp2d(timesteps_rs, np.arange(len(new_eefs_segment)), new_eefs_segment)
-        
-            ### Generate fullbody traj
-            bodypart2traj = {}
-            for (lr,old_joint_traj) in lr2oldtraj.items():
+                Ft = np.zeros((14, 21))
+                for j in range(14):
+                    Ft[j][j] = 1.0
+                deltat = 0.01
+                for j in range(7):
+                    Ft[j][j+7] = deltat
+                for j in range(7):
+                    Ft[j+7][j+14] = deltat/m[j]  
+                for j in range(7):
+                    Ft[j][j+14] = ((deltat)**2)/m[j]
+                Qt = allCs[t] + (np.transpose(Ft).dot(Vs[length_part-2-t]).dot(Ft))
+            Qxx = Qt[0:14, 0:14]
+            Quu = Qt[14:21, 14:21]
+            Qxu = Qt[0:14, 14:21]
+            Qux = Qt[14:21, 0:14]
+            Quuinv = np.linalg.inv(Quu)
+            Vt = Qxx - Qxu.dot(Quuinv).dot(Qux)
+            Vt = 0.5*(Vt + np.transpose(Vt))
+            Kt = -1*(Quuinv.dot(Qux))
+            Ks.append(Kt)
+            Kps.append(Kt[:, 0:7])
+            Kvs.append(Kt[:, 7:14])
+            Vs.append(Vt)
 
-                manip_name = {"l":"leftarm", "r":"rightarm"}[lr]
-                ee_link_name = "%s_gripper_tool_frame"%lr
-                new_ee_traj = link2eetraj[ee_link_name][i_start:i_end+1]
-                if args.no_ds:
-                    old_joint_traj_rs = old_joint_traj
-                    new_ee_traj_rs = new_ee_traj
-                    ds_inds = np.arange(0, len(new_ee_traj_rs), args.trajopt_ds)
-                    new_ee_traj_rs = new_ee_traj_rs[ds_inds]
-                    
-                    old_joint_traj_rs = old_joint_traj_rs[ds_inds]
-                    new_joint_traj = planning.plan_follow_traj(Globals.robot, manip_name,
-                        Globals.robot.GetLink(ee_link_name), new_ee_traj_rs,old_joint_traj_rs)
-                    new_joint_traj = mu.interp2d(np.arange(len(old_joint_traj)), np.arange(0, len(new_joint_traj) * args.trajopt_ds, args.trajopt_ds), new_joint_traj)
-                else:
-                    old_joint_traj_rs = mu.interp2d(timesteps_rs, np.arange(len(old_joint_traj)), old_joint_traj)
-                    new_ee_traj_rs = resampling.interp_hmats(timesteps_rs, np.arange(len(new_ee_traj)), new_ee_traj)
-                    new_joint_traj = planning.plan_follow_traj(Globals.robot, manip_name,
-                        Globals.robot.GetLink(ee_link_name), new_ee_traj_rs,old_joint_traj_rs)
-                if args.execution: Globals.pr2.update_rave()
-                part_name = {"l":"larm", "r":"rarm"}[lr]
-                bodypart2traj[part_name] = new_joint_traj
-                redprint("Joint trajectory has length: " + str(len(bodypart2traj[part_name])))
-                
-            redprint("Executing joint trajectory for segment %s, part %i using arms '%s'"%(seg_name, i_miniseg, bodypart2traj.keys()))
+        Kps = Kps[::-1]
+        Kvs = Kvs[::-1]
 
 
+        JKpJ[lr] = np.asarray(Kps)
+        JKvJ[lr] = np.asarray(Kvs)
+
+
+    # Pad initial traj with PD gains
+    addkp = np.asarray([pgainsdiag for i in range(initial_traj_length)])
+    addkv = np.asarray([dgainsdiag for i in range(initial_traj_length)])
+    for lr in 'lr':
+        JKpJ[lr] = np.concatenate((JKpJ[lr], addkp), axis=0)
+        JKvJ[lr] = np.concatenate((JKvJ[lr], addkv), axis=0)
+
+    Kps = []
+    Kvs = []
+    for i in range(length_total):
+        Kps.append(np.zeros((6,6)))
+        Kvs.append(np.zeros((6,6)))
+
+
+    Kps = np.asarray(Kps)
+    Kvs = np.asarray(Kvs)
+
+    if args.force:
+        for lr in 'lr':
+            JKpJ[lr] = np.asarray([pgainsdiag/args.multiplier for i in range(length_total)])
+            JKvJ[lr] = np.asarray([dgainsdiag/args.multiplier for i in range(length_total)])
+
+
+    if args.kinematics:
+        for lr in 'lr':
+            JKpJ[lr] = np.asarray([pgainsdiag for i in range(length_total)])
+            JKvJ[lr] = np.asarray([dgainsdiag for i in range(length_total)])
+            F[lr] = np.asarray([np.zeros((6, 1)) for i in range(length_total)])
+    
+
+
+    # Not testing one arm
+    """
+    for lr in 'r':
+        JKpJ[lr] = np.asarray([pgainsdiag for i in range(length_total)])
+        JKvJ[lr] = np.asarray([dgainsdiag for i in range(length_total)])
+    """
+
+    Kps = np.resize(Kps, (1, 36 * length_total))[0]
+    Kvs = np.resize(Kvs, (1, 36 * length_total))[0]
+    
+
+    
+    
+    for lr in 'lr':
+        JKvJ[lr] = np.resize(JKvJ[lr], (1, 49*length_total))[0]
+        JKpJ[lr] = np.resize(JKpJ[lr], (1, 49*length_total))[0]
+        traj[lr] = np.resize(traj[lr], (1, traj[lr].shape[0]*7))[0] 
+        F[lr] = np.resize(F[lr], (1, F[lr].shape[0]*6))[0] 
+    gripper = np.resize(gripper, (1, gripper.shape[0]))[0]
+
+
+    # [traj, Kp, Kv, F, use_force, seconds]
+    data = np.zeros((1, length_total*(7+49+49+6+36+36+7+49+49+6+36+36+1)+2))
+    data[0][0:length_total*7] = traj['r']
+    data[0][length_total*7:length_total*(7+49)] = JKpJ['r']
+    data[0][length_total*(7+49):length_total*(7+49+49)] = JKvJ['r']
+    data[0][length_total*(7+49+49):length_total*(7+49+49+6)] = F['r']
+    data[0][length_total*(7+49+49+6):length_total*(7+49+49+6+36)] = Kps
+    data[0][length_total*(7+49+49+6+36):length_total*(7+49+49+6+36+36)] = Kvs
+    data[0][length_total*(7+49+49+6+36+36):length_total*(7+49+49+6+36+36+7)] = traj['l']
+    data[0][length_total*(7+49+49+6+36+36+7):length_total*(7+49+49+6+36+36+7+49)] = JKpJ['l']
+    data[0][length_total*(7+49+49+6+36+36+7+49):length_total*(7+49+49+6+36+36+7+49+49)] = JKvJ['l']
+    data[0][length_total*(7+49+49+6+36+36+7+49+49):length_total*(7+49+49+6+36+36+7+49+49+6)] = F['l']
+    data[0][length_total*(7+49+49+6+36+36+7+49+49+6):length_total*(7+49+49+6+36+36+7+49+49+6+36)] = Kps
+    data[0][length_total*(7+49+49+6+36+36+7+49+49+6+36):length_total*(7+49+49+6+36+36+7+49+49+6+36+36)] = Kvs
+    data[0][length_total*(7+49+49+6+36+36+7+49+49+6+36+36):length_total*(7+49+49+6+36+36+7+49+49+6+36+36+1)] = gripper
+    data[0][-2] = 1.0
+    data[0][-1] = 1.0
+    msg = Float64MultiArray()
+    msg.data = data[0].tolist()
+    pub = rospy.Publisher("/controller_data", Float64MultiArray)
+    redprint("Press enter to start trajectory")
+    raw_input()
+    for lr in 'lr':
+        set_gripper_maybesim(lr, 0.08)
+    time.sleep(5)
+    pub.publish(msg)
+    listener()
+
+
+
+
+
+def callback(msg):
+    if msg.data == 1.0:
+        set_gripper_maybesim('r', 0.08)
+    elif msg.data == -1.0:
+        set_gripper_maybesim('r', 0.0)
+    elif msg.data == 2.0:
+        set_gripper_maybesim('l', 0.08)
+    elif msg.data == -2.0:
+        set_gripper_maybesim('l', 0.0)
+    
+def listener():
+    rospy.Subscriber("/my_controller_name/gripper_trajectory", Float32, callback)
+    # spin() simply keeps python from exiting until this node is stopped
+    rospy.spin()
+
+
+
+"""
             redprint("Press enter to set gripper")
             raw_input()
-
-            for lr in 'r':
+            for lr in 'lr':
                 set_gripper_maybesim(lr, binarize_gripper(seg_info["%s_gripper_joint"%lr][i_start]))
 
-            if args.pid:
-
-                if not args.fake_data_segment: # If running on PR2, add initial state as waypoint and rough interpolate
-                    # Add initial position
-                    (arm_position, arm_velocity, arm_effort) = robot_states.call_return_joint_states(robot_states.arm_joint_names)
-                    traj_length = bodypart2traj['rarm'].shape[0]
-                    complete_joint_traj = np.zeros((traj_length+1, 7)) # To include initial state as a way point
-                    complete_joint_traj[1:,:] = bodypart2traj['rarm']
-                    complete_joint_traj[0,:] = arm_position
-                    bodypart2traj['rarm'] = complete_joint_traj
-
-                    # Add initial eff
-                    J = np.matrix(np.resize(np.array(robot_states.call_return_jacobian()), (6, 7))) # Jacobian
-                    eff = robot_states.compute_end_effector_force(J, arm_effort).T
-                    eff =  np.array(eff)[0]
-                    init_force = eff[:3]
-                    complete_force_traj = np.zeros((traj_length+1, 3))
-                    complete_force_traj[1:,:] = new_eefs_segment_rs
-                    complete_force_traj[0,:] = init_force
-
-                else:
-                    complete_force_traj = new_eefs_segment_rs
-                # SECOND RESAMPLING HAPPENS HERE: JOINT VELOCITIES
-                if args.no_ds:
-                    traj = bodypart2traj['rarm']
-                    stamps = asarray(seg_info['stamps'])
-                    times = np.array([stamps[i_end] - stamps[i_start]])
-                    force = complete_force_traj
-                else:
-                    times, times_up, traj = pr2_trajectories.return_timed_traj(Globals.pr2, bodypart2traj) # use times and times_up to interpolate the second time
-                    force = mu.interp2d(times_up, times, complete_force_traj)
-                
-                #Globals.robot.SetDOFValues(asarray(fake_seg["joint_states"]["position"][0]))
-                if args.visualize:
-                    r2r = ros2rave.RosToRave(Globals.robot, asarray(seg_info["joint_states"]["name"]))
-                    r2r.set_values(Globals.robot, asarray(seg_info["joint_states"]["position"][0]))
-                    for i in range(0, traj.shape[0], 10):
-                        handles = []
-                        handles.append(Globals.env.plot3(new_xyz,5,np.array([(0,1,0,1) for x in new_xyz])))
-                        handles.append(Globals.env.plot3(old_xyz,5,np.array([(1,0,0,1) for x in old_xyz])))
-                        handles.append(Globals.env.drawlinestrip(old_ee_traj[:,:3,3], 2, (1,0,0,1)))
-                        handles.append(Globals.env.drawlinestrip(new_ee_traj[:,:3,3], 2, (0,1,0,1)))
-                        handles.append(Globals.env.drawlinestrip(new_ee_traj_rs[:,:3,3], 2, (0,0,1,1)))
-                        # Setting robot arm to joint trajectory
-                        r_vals = traj[i,:]
-                        Globals.robot.SetDOFValues(r_vals, Globals.robot.GetManipulator('rightarm').GetArmIndices())
-                        
-                        # Plotting forces from r_gripper_tool_frame
-                        hmats = Globals.robot.GetLinkTransformations()
-                        trans, rot = conv.hmat_to_trans_rot(hmats[-3])
-                        f_start = np.array([0,0,0]) + trans
-                        f_end = np.array(force[i])/100 + trans
-                        handles.append(Globals.env.drawlinestrip(np.array([f_start, f_end]), 10, (1,0,0,1)))
-                        
-                        redprint(i)
-                        Globals.viewer.Step()
-
-
-                traj = np.array(np.matrix(traj).T) # 7 x n
-                redprint(traj)
-
-                traj = np.resize(traj, (1, traj.shape[1]*7)) #resize the data to 1x7n (n being the number of steps)
-                force = np.array(np.matrix(force).T) # 3 x n
-                force = np.resize(force, (1, force.shape[1]*3)) #resize the data to 1x3n
-                #[traj, force, secs]
-                traj_force_secs = np.zeros((1, traj.shape[1] + force.shape[1] + 2))
-                traj_force_secs[0,0:traj.shape[1]] = traj
-                traj_force_secs[0,traj.shape[1]:traj.shape[1]+force.shape[1]] = force
-                traj_force_secs[0,traj.shape[1]+force.shape[1]] = times[len(times)-1]
-
-                traj_force_secs[0,traj.shape[1]+force.shape[1]+1] = args.use_force
-
-                msg = Float64MultiArray()
-                msg.data = traj_force_secs[0].tolist()
-                pub = rospy.Publisher("/joint_positions_forces_secs", Float64MultiArray)
-                redprint("Press enter to start trajectory")
-                raw_input()
-                time.sleep(1)
-                pub.publish(msg)
-                time.sleep(1)
-            else:
-                #if not success: break
-                
-                if len(bodypart2traj) > 0:
-                    exec_traj_maybesim(bodypart2traj)
-            
-            #if not success: break
-
-        #redprint("Segment %s result: %s"%(seg_name, success))
-        
-
+"""
 if __name__ == "__main__":
 
     main()

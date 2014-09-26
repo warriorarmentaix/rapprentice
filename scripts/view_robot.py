@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import trajoptpy, openravepy
 import os, numpy as np, h5py, time, os.path as osp
-from rapprentice import robot_states
+from old_rapprentice import robot_states, PR2
 
 from hd_rapprentice import registration, animate_traj, ros2rave, plotting_openrave
 from hd_utils.defaults import cad_files_dir
@@ -16,6 +16,9 @@ from geometry_msgs.msg import Vector3Stamped, Vector3
 import pylab
 from pylab import *
 import time
+import openravepy
+
+
 
 #ros stuffs
 def mirror_arm_joints(x):
@@ -32,20 +35,24 @@ L_POSTURES = dict(
     side = [  1.832,  -0.332,   1.011,  -1.437,   1.1  ,  -2.106,  3.074]
 )
 
-env = openravepy.Environment()
-env.StopSimulation()
-env.Load("robots/pr2-beta-static.zae")
-robot = env.GetRobots()[0]
-viewer = trajoptpy.GetViewer(env)
 
-env.Load(osp.join(cad_files_dir, 'table_sim.xml'))
-body = env.GetKinBody('table')
+fake_env = openravepy.Environment()
+fake_env.StopSimulation()
+fake_env.Load("robots/pr2-beta-static.zae")
+fake_robot = fake_env.GetRobots()[0]
+viewer = trajoptpy.GetViewer(fake_env)
+
+fake_env.Load(osp.join(cad_files_dir, 'table_sim.xml'))
+body = fake_env.GetKinBody('table')
 viewer.SetTransparency(body,0.4)
 
 
-rospy.init_node('force_torque_velocity_visualization')
-pub = rospy.Publisher('end_effector_force', Vector3Stamped)
+rospy.init_node("visualize",disable_signals=True)
+pr2 = PR2.PR2()
+env = pr2.env
+robot = pr2.robot
 listener = tf.TransformListener()
+
 time.sleep(1)
 
 def update():
@@ -55,28 +62,32 @@ def update():
 
 
     # Set robot in simulation
-	(arm_position, arm_velocity, arm_effort) = robot_states.call_return_joint_states(robot_states.arm_joint_names)
+	(arm_position, arm_velocity, arm_effort) = robot_states.call_return_joint_states(robot_states.r_arm_joint_names)
 	r_vals = arm_position
 	robot.SetDOFValues(r_vals, robot.GetManipulator('rightarm').GetArmIndices())
-	robot.SetDOFValues(mirror_arm_joints(r_vals), robot.GetManipulator('leftarm').GetArmIndices())
+	fake_robot.SetDOFValues(r_vals, robot.GetManipulator('rightarm').GetArmIndices())
 	(torso_position, torso_velocity, torso_effort) = robot_states.call_return_joint_states(robot_states.torso_joint_names)
 	t_vals = torso_position
 	robot.SetDOFValues(t_vals, [12]) #Torso manipular index
+	fake_robot.SetDOFValues(t_vals, [12])
 
 
 	#Get end effector force & torque
-	J = np.matrix(np.resize(np.array(robot_states.call_return_jacobian()), (6, 7))) # Jacobian
+	arm = robot.GetManipulator('rightarm')
+	J = np.vstack((arm.CalculateJacobian(), arm.CalculateAngularVelocityJacobian()))
+	print J
 	eff_force = robot_states.compute_end_effector_force(J, arm_effort).T
 	eff_force =  np.array(eff_force)[0]
 	force = eff_force[:3]
 	torque = eff_force[3:]
 
 
+	"""
 	# Publish force
 	header = Header()
 	header.stamp = rospy.Time.now()
 	pub.publish(Vector3Stamped(header,Vector3(force[0],force[1],force[2])))
-
+	"""
 
 	# Plot end effector force & torque
 	handles = []
@@ -84,12 +95,12 @@ def update():
 	f_start = np.array([0,0,0]) + trans
 	f_plot = scale(np.array(force),100) # for plotting
 	f_end = scale(np.array(force),100) + trans
-	handles.append(env.drawlinestrip(np.array([f_start, f_end]), 10, (1,0,0,1)))
+	#handles.append(fake_env.drawlinestrip(np.array([f_start, f_end]), 10, (1,0,0,1)))
 
 	t_start = np.array([0,0,0]) + trans
 	t_plot = scale(np.array(torque),27) # for plotting
 	t_end = scale(np.array(torque),27) + trans
-	handles.append(env.drawlinestrip(np.array([t_start, t_end]), 10, (0,1,0,1)))
+	#handles.append(fake_env.drawlinestrip(np.array([t_start, t_end]), 10, (0,1,0,1)))
 	
 
 
@@ -101,7 +112,7 @@ def update():
 	v_start = np.array([0,0,0]) + trans
 	v_plot = scale(np.array(trans_vel),3) # for plotting
 	v_end = scale(np.array(trans_vel),3) + trans
-	handles.append(env.drawlinestrip(np.array([v_start, v_end]), 10, (0,0,1,1)))
+	handles.append(fake_env.drawlinestrip(np.array([v_start, v_end]*20), 10, (0,0,1,1)))
 
 	viewer.Step()
 

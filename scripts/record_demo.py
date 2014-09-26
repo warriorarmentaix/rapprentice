@@ -8,10 +8,10 @@ parser.add_argument("--downsample", default=3, type=int)
 args = parser.parse_args()
 
 import subprocess, signal
-from rapprentice.colorize import colorize
+from old_rapprentice.colorize import colorize
 import time, os, shutil
-from rapprentice.call_and_print import call_and_print
-from rapprentice.yes_or_no import yes_or_no
+from old_rapprentice.call_and_print import call_and_print
+from old_rapprentice.yes_or_no import yes_or_no
 import os.path as osp
 import itertools
 import yaml
@@ -52,7 +52,7 @@ for suffix in itertools.chain("", (str(i) for i in itertools.count())):
 
 try:
 
-    bag_cmd = "rosbag record /pr2_jacobian /joint_states /joy -O %s"%demo_name
+    bag_cmd = "rosbag record /pr2_jacobian_r /pr2_jacobian_l /joint_states /joy -O %s"%demo_name
     print colorize(bag_cmd, "green")
     bag_handle = subprocess.Popen(bag_cmd, shell=True)
     time.sleep(1)
